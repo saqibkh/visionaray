@@ -20,7 +20,7 @@ namespace visionaray
 struct bvh_collapser
 {
     template <typename Tree, typename WideTree>
-    void collapse(Tree const& tree, WideTree& wide_tree, thread_pool& /*pool*/)
+    void collapse(Tree const& tree, WideTree& wide_tree, thread_pool& pool)
     {
         static_assert(Tree::Width == 2, "Type mismatch");
 
@@ -33,7 +33,20 @@ struct bvh_collapser
             multi_nodes[i].init(i, tree.nodes().data());
         }
 
-#if 1
+        collapse_multi_nodes(multi_nodes, pool);
+
+        // Assign rest of the tree
+        init_primitives(tree, wide_tree);
+    }
+
+protected:
+    template <typename NodeVector>
+    void collapse_multi_nodes(NodeVector& multi_nodes, thread_pool& /*pool*/)
+    {
+        using node_t = typename NodeVector::value_type;
+
+        constexpr int W = node_t::Width;
+
         detail::stack<64> st;
 
         st.push(0);
@@ -43,7 +56,7 @@ struct bvh_collapser
             unsigned addr = st.pop();
             auto& node = multi_nodes[addr];
 
-            while (node.get_num_children() < WideTree::Width)
+            while (node.get_num_children() < W)
             {
                 int best_child_id = -1;
                 float best_sa = 0.0f;
@@ -77,7 +90,7 @@ struct bvh_collapser
                     const aabb& child_bounds = node.get_child_bounds(i);
 
                     // Check if we can accommodate all grand children:
-                    if (node.get_num_children() - 1 + child.get_num_children() <= WideTree::Width)
+                    if (node.get_num_children() - 1 + child.get_num_children() <= W)
                     {
                         float sa = surface_area(child_bounds);
                         if (sa > best_sa)
@@ -116,7 +129,6 @@ struct bvh_collapser
                 }
             }
         }
-#endif
 
         // Remove empty nodes
         std::vector<int64_t> prefix(multi_nodes.size());
@@ -148,9 +160,6 @@ struct bvh_collapser
                 }
             }
         }
-
-        // Assign rest of the tree
-        init_primitives(tree, wide_tree);
     }
 
 private:
